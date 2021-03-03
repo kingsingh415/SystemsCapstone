@@ -8,11 +8,16 @@ import {
   loadProgram,
   sayHello,
   reportHellos,
+  reportAccounts,
 } from './hello_world';
+
+
 
 async function main() {
   console.log("Let's say hello to a Solana account...");
-
+  const readlineSync = require('readline-sync');
+  let postBody = readlineSync.question('Enter your post: ', { hideEchoBack: false });
+  
   // Establish connection to the cluster
   await establishConnection();
 
@@ -23,10 +28,13 @@ async function main() {
   await loadProgram();
 
   // Say hello to an account
-  await sayHello();
+  await sayHello(postBody);
 
   // Find out how many times that account has been greeted
   await reportHellos();
+
+  // Get accounts owned by the program
+  await reportAccounts();
 
   console.log('Success');
 }

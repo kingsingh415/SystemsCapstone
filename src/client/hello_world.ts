@@ -15,10 +15,11 @@ import {
   Transaction,
   sendAndConfirmTransaction,
 } from '@solana/web3.js';
-import fs from 'mz/fs';
+import fs, { read } from 'mz/fs';
 
 // @ts-ignore
 import BufferLayout from 'buffer-layout';
+const lo = BufferLayout;
 
 import {url, urlTls} from './util/url';
 import {Store} from './util/store';
@@ -47,11 +48,59 @@ let greetedPubkey: PublicKey;
 const pathToProgram = 'dist/program/helloworld.so';
 
 /**
+ * Layout of a single post
+ */
+const postLayout = BufferLayout.struct([
+  //BufferLayout.u32('numGreets'),
+  BufferLayout.u8('type'),
+  BufferLayout.cstr('body'),
+]);
+
+/**
+ * Layout of account data
+ */
+const accountLayout = BufferLayout.struct([
+  BufferLayout.u16('numPosts'),
+  BufferLayout.seq(postLayout, BufferLayout.offset(BufferLayout.u16(), -1), 'posts'),
+]);
+
+/**
  * Layout of the greeted account data
  */
 const greetedAccountDataLayout = BufferLayout.struct([
-  BufferLayout.u32('numGreets'),
+  //BufferLayout.seq(BufferLayout.u8(), 1024, 'account_data'),
+  BufferLayout.seq(BufferLayout.u8(), 1024, 'account_data'),
 ]);
+
+function printAccountPosts(d: Buffer) {
+  const postCount = d.readUInt16LE(0);
+  console.log("# of posts on account:", postCount);
+  //const accountData = accountLayout.decode(d);
+  //console.log(accountData.posts);
+  // For now, just print with a for loop
+  let readType = false;
+  let currentPost = "";
+  let i = 2;
+  for(; i < d.length; i++) {
+    // Stop after reading 2 terminators in a row
+    if(d.readUInt8(i) == 0 && d.readUInt8(i - 1) == 0) {
+      return;
+    }
+    if(!readType) {
+      process.stdout.write("Type: " + String.fromCharCode(d.readUInt8(i)));
+      readType = true;
+    }
+    else if(d.readUInt8(i) == 0) {
+      console.log("\tBody:", currentPost);
+      currentPost = "";
+      readType = false;
+    }
+    else {
+      currentPost += String.fromCharCode(d.readUInt8(i));
+    }
+  }
+  console.log("Account has used", i, "out of", d.length, "available bytes");
+}
 
 /**
  * Establish a connection to the cluster
@@ -170,12 +219,22 @@ export async function loadProgram(): Promise<void> {
 /**
  * Say hello
  */
-export async function sayHello(): Promise<void> {
+export async function sayHello(body: string): Promise<void> {
   console.log('Saying hello to', greetedPubkey.toBase58());
+
+  /*
+  rl.on("close", function() {
+      console.log("\nBYE BYE !!!");
+      process.exit(0);
+  });
+  */
+  //const post = Buffer.from('Ptest\0');
+  const post = Buffer.from('P' + body + '\0');
+  console.log("Length of post:", post.length);
   const instruction = new TransactionInstruction({
     keys: [{pubkey: greetedPubkey, isSigner: false, isWritable: true}],
     programId,
-    data: Buffer.alloc(0), // All instructions are hellos
+    data: post,//Buffer.alloc(0), // All instructions are hellos
   });
   await sendAndConfirmTransaction(
     connection,
@@ -196,11 +255,40 @@ export async function reportHellos(): Promise<void> {
   if (accountInfo === null) {
     throw 'Error: cannot find the greeted account';
   }
-  const info = greetedAccountDataLayout.decode(Buffer.from(accountInfo.data));
+  //const info = greetedAccountDataLayout.decode(Buffer.from(accountInfo.data));
+  /*
   console.log(
     greetedPubkey.toBase58(),
     'has been greeted',
     info.numGreets.toString(),
     'times',
   );
+  */
+ //console.log(greetedPubkey.toBase58(), ":");
+ //console.log("Account data:", info.account_data.toString());
+}
+
+/**
+ * Print given accounts' data
+ */
+async function printAccountData(account: PublicKey): Promise<void> {
+  const accountInfo = await connection.getAccountInfo(greetedPubkey);
+  if (accountInfo === null) {
+    throw 'Error: cannot get data for account ' + account.toBase58();
+  }
+  //const info = accountLayout.decode(Buffer.from(accountInfo.data));
+  //console.log("Account has", accountInfo.data.length, "bytes");
+  printAccountPosts(accountInfo.data);
+}
+
+/**
+ * Report the accounts owned by the program
+ */
+export async function reportAccounts(): Promise<void> {
+  const accounts = await connection.getProgramAccounts(programId);
+  console.log("Accounts owned by program:");
+  for(let i = 0; i < accounts.length; i++) {
+    console.log(accounts[i].pubkey.toBase58());
+    await printAccountData(accounts[i].pubkey);
+  }
 }
