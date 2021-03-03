@@ -14,9 +14,10 @@ import {
 
 
 async function main() {
-  console.log("Let's say hello to a Solana account...");
+  console.log("--------------------Solana forum demo--------------------");
   const readlineSync = require('readline-sync');
-  let postBody = readlineSync.question('Enter your post: ', { hideEchoBack: false });
+  let options = ["View posts", "New post"];
+  let response = readlineSync.keyInSelect(options, "Choose one (New post assumes you have a valid store)")
   
   // Establish connection to the cluster
   await establishConnection();
@@ -27,15 +28,27 @@ async function main() {
   // Load the program if not already loaded
   await loadProgram();
 
-  // Say hello to an account
-  await sayHello(postBody);
+  switch(response) {
+    case 0:
+      // Get accounts owned by the program
+      await reportAccounts();
+      break;
+    case 1:
+      // Enter post text
+      let postBody = readlineSync.question('Enter your post: ', { hideEchoBack: false });
 
-  // Find out how many times that account has been greeted
-  await reportHellos();
+      // Say hello to an account
+      await sayHello(postBody);
 
-  // Get accounts owned by the program
-  await reportAccounts();
+      // Find out how many times that account has been greeted
+      await reportHellos();
 
+      // Get accounts owned by the program
+      await reportAccounts();
+      break;
+    default:
+      break;
+  }
   console.log('Success');
 }
 
