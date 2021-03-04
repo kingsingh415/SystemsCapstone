@@ -102,7 +102,7 @@ function printAccountPosts(d: Buffer) {
   console.log("Account has used", i, "out of", d.length, "available bytes");
 }
 
-export function arrayOfPosts(d: Buffer):string[] {
+export function arrayOfPosts(d: Buffer, key: PublicKey):string[] {
   let readType = false;
   let currentPost = "";
   let i = 2;
@@ -116,11 +116,12 @@ export function arrayOfPosts(d: Buffer):string[] {
     }
     if(!readType) {
       // process.stdout.write("Type: " + String.fromCharCode(d.readUInt8(i)));
+      currentPost += "Type: " + String.fromCharCode(d.readUInt8(i)) + " - ";
       readType = true;
     }
     else if(d.readUInt8(i) == 0) {
       // console.log("\tBody:", currentPost);
-      let toPush = (x + " - " + currentPost);
+      let toPush = (x + " - " + currentPost + " - Posted By: " + key);
       x++;
       ret.push(toPush)
       currentPost = "";
@@ -337,8 +338,8 @@ export async function getArrayOfPosts(): Promise<string[]> {
   if (accountInfo === null) {
     throw 'Error: cannot get data for account ';
   }
-  if (arrayOfPosts(accountInfo.data) != null) {
-    return arrayOfPosts(accountInfo.data);
+  if (arrayOfPosts(accountInfo.data, greetedPubkey) != null) {
+    return arrayOfPosts(accountInfo.data, greetedPubkey);
   }
   else {
     let x: string[] = [""];
