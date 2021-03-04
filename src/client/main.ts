@@ -34,7 +34,9 @@ async function main() {
       // Get accounts owned by the program
       // await reportAccounts();
       let view = await getArrayOfPosts();
-      console.log(view);
+      for (var val of view) {
+        console.log(val); 
+      }
       break;
     case 1:
       // Enter post text
@@ -47,11 +49,19 @@ async function main() {
       await reportHellos();
 
       // Get accounts owned by the program
-      await reportAccounts();
+      // await reportAccounts();
+
+      let postRet = await getArrayOfPosts();
+      for (var val of postRet) {
+        console.log(val);
+      }
+
       break;
     case 2:
       let ret = await getArrayOfPosts();
-      console.log(ret);
+      for (var val of ret) {
+        console.log(val);
+      }
       let choice = readlineSync.question('Enter which post number you would like to send a like to: ', { hideEchoBack: false });
       var num: number = +choice;
       var split = ret[num].split(" - ");
