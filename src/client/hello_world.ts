@@ -102,6 +102,39 @@ function printAccountPosts(d: Buffer) {
   console.log("Account has used", i, "out of", d.length, "available bytes");
 }
 
+export function arrayOfPosts(d: Buffer):string[] {
+  let readType = false;
+  let currentPost = "";
+  let i = 2;
+  let x = 1;
+  const postCount = d.readUInt16LE(0);
+  var ret = new Array("")
+  for(; i < d.length; i++) {
+    // Stop after reading 2 terminators in a row
+    if(d.readUInt8(i) == 0 && d.readUInt8(i - 1) == 0) {
+      return ret;
+    }
+    if(!readType) {
+      // process.stdout.write("Type: " + String.fromCharCode(d.readUInt8(i)));
+      readType = true;
+    }
+    else if(d.readUInt8(i) == 0) {
+      // console.log("\tBody:", currentPost);
+      let toPush = (x + " - " + currentPost);
+      x++;
+      ret.push(toPush)
+      currentPost = "";
+      readType = false;
+    }
+    else {
+      currentPost += String.fromCharCode(d.readUInt8(i));
+    }
+  }
+  // console.log("Account has used", i, "out of", d.length, "available bytes");
+  // console.log(ret)
+  return ret;
+}
+
 /**
  * Establish a connection to the cluster
  */
@@ -219,7 +252,7 @@ export async function loadProgram(): Promise<void> {
 /**
  * Say hello
  */
-export async function sayHello(body: string): Promise<void> {
+export async function sayHello(body: string, type: string): Promise<void> {
   console.log('Saying hello to', greetedPubkey.toBase58());
 
   /*
@@ -229,7 +262,13 @@ export async function sayHello(body: string): Promise<void> {
   });
   */
   //const post = Buffer.from('Ptest\0');
-  const post = Buffer.from('P' + body + '\0');
+  let post = Buffer.from("");
+  if (type == "post") {
+    post = Buffer.from('P' + body + '\0');
+  }
+  else if (type == "like") {
+    post = Buffer.from('L' + body + '\0');
+  }
   console.log("Length of post:", post.length);
   const instruction = new TransactionInstruction({
     keys: [{pubkey: greetedPubkey, isSigner: false, isWritable: true}],
@@ -290,5 +329,19 @@ export async function reportAccounts(): Promise<void> {
   for(let i = 0; i < accounts.length; i++) {
     console.log(accounts[i].pubkey.toBase58());
     await printAccountData(accounts[i].pubkey);
+  }
+}
+
+export async function getArrayOfPosts(): Promise<string[]> {
+  const accountInfo = await connection.getAccountInfo(greetedPubkey);
+  if (accountInfo === null) {
+    throw 'Error: cannot get data for account ';
+  }
+  if (arrayOfPosts(accountInfo.data) != null) {
+    return arrayOfPosts(accountInfo.data);
+  }
+  else {
+    let x: string[] = [""];
+    return x;
   }
 }
