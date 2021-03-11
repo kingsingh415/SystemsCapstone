@@ -24,7 +24,8 @@ const lo = BufferLayout;
 import {url, urlTls} from './util/url';
 import {Store} from './util/store';
 import {newAccountWithLamports} from './util/new-account-with-lamports';
-
+import BaseConverter from 'base-x';
+const bs58 = BaseConverter("base-58");
 /**
  * Connection to the network
  */
@@ -41,9 +42,9 @@ let payerAccount: Account;
 let programId: PublicKey;
 
 /**
- * The public key of the account we are saying hello to
+ * Greeted account
  */
-let greetedPubkey: PublicKey;
+let greetedAccount: Account;
 
 const pathToProgram = 'dist/program/helloworld.so';
 
@@ -190,63 +191,67 @@ export async function loadProgram(): Promise<void> {
   const store = new Store();
 
   // Check if the program has already been loaded
+  let config: any;
   try {
-    const config = await store.load('config.json');
+    config = await store.load('config.json');
     programId = new PublicKey(config.programId);
-    greetedPubkey = new PublicKey(config.greetedPubkey);
     await connection.getAccountInfo(programId);
     console.log('Program already loaded to account', programId.toBase58());
-    return;
   } catch (err) {
     // try to load the program
+    // Load the program
+    console.log('Loading hello world program...');
+    const data = await fs.readFile(pathToProgram);
+    const programAccount = new Account();
+    await BpfLoader.load(
+      connection,
+      payerAccount,
+      programAccount,
+      data,
+      BPF_LOADER_PROGRAM_ID,
+    );
+    programId = programAccount.publicKey;
+    console.log('Program loaded to account', programId.toBase58());
   }
 
-  // Load the program
-  console.log('Loading hello world program...');
-  const data = await fs.readFile(pathToProgram);
-  const programAccount = new Account();
-  await BpfLoader.load(
-    connection,
-    payerAccount,
-    programAccount,
-    data,
-    BPF_LOADER_PROGRAM_ID,
-  );
-  programId = programAccount.publicKey;
-  console.log('Program loaded to account', programId.toBase58());
-
-  // Create the greeted account
-  const greetedAccount = new Account();
-  greetedPubkey = greetedAccount.publicKey;
-  console.log('Creating account', greetedPubkey.toBase58(), 'to say hello to');
-  const space = greetedAccountDataLayout.span;
-  const lamports = await connection.getMinimumBalanceForRentExemption(
-    greetedAccountDataLayout.span,
-  );
-  const transaction = new Transaction().add(
-    SystemProgram.createAccount({
-      fromPubkey: payerAccount.publicKey,
-      newAccountPubkey: greetedPubkey,
-      lamports,
-      space,
-      programId,
-    }),
-  );
-  await sendAndConfirmTransaction(
-    connection,
-    transaction,
-    [payerAccount, greetedAccount],
-    {
-      commitment: 'singleGossip',
-      preflightCommitment: 'singleGossip',
-    },
-  );
+  //if(config.secretKey) {
+  //  console.log("Using existing account with secret key", config.secretKey);
+  //  greetedAccount = new Account(Buffer.from(config.secretKey));
+  //} else {
+    console.log("Creating new account");
+    greetedAccount = new Account();
+    // Create the greeted account
+    console.log('Creating account', greetedAccount.publicKey.toBase58(), 'to say hello to');
+    const space = greetedAccountDataLayout.span;
+    const lamports = await connection.getMinimumBalanceForRentExemption(
+      greetedAccountDataLayout.span,
+    );
+    const transaction = new Transaction().add(
+      SystemProgram.createAccount({
+        fromPubkey: payerAccount.publicKey,
+        newAccountPubkey: greetedAccount.publicKey,
+        lamports,
+        space,
+        programId,
+      }),
+    );
+    await sendAndConfirmTransaction(
+      connection,
+      transaction,
+      [payerAccount, greetedAccount],
+      {
+        commitment: 'singleGossip',
+        preflightCommitment: 'singleGossip',
+      },
+    );
+  //}
 
   // Save this info for next time
   await store.save('config.json', {
     url: urlTls,
     programId: programId.toBase58(),
-    greetedPubkey: greetedPubkey.toBase58(),
+    publicKey: greetedAccount.publicKey.toBase58(),
+    secretKey: bs58.encode(greetedAccount.secretKey),
   });
 }
 
@@ -254,7 +259,7 @@ export async function loadProgram(): Promise<void> {
  * Say hello
  */
 export async function sayHello(body: string, type: string): Promise<void> {
-  console.log('Saying hello to', greetedPubkey.toBase58());
+  console.log('Saying hello to', greetedAccount.publicKey.toBase58());
 
   /*
   rl.on("close", function() {
@@ -272,14 +277,14 @@ export async function sayHello(body: string, type: string): Promise<void> {
   }
   console.log("Length of post:", post.length);
   const instruction = new TransactionInstruction({
-    keys: [{pubkey: greetedPubkey, isSigner: false, isWritable: true}],
+    keys: [{pubkey: greetedAccount.publicKey, isSigner: true, isWritable: true}],
     programId,
     data: post,//Buffer.alloc(0), // All instructions are hellos
   });
   await sendAndConfirmTransaction(
     connection,
     new Transaction().add(instruction),
-    [payerAccount],
+    [payerAccount, greetedAccount],
     {
       commitment: 'singleGossip',
       preflightCommitment: 'singleGossip',
@@ -291,20 +296,20 @@ export async function sayHello(body: string, type: string): Promise<void> {
  * Report the number of times the greeted account has been said hello to
  */
 export async function reportHellos(): Promise<void> {
-  const accountInfo = await connection.getAccountInfo(greetedPubkey);
+  const accountInfo = await connection.getAccountInfo(greetedAccount.publicKey);
   if (accountInfo === null) {
     throw 'Error: cannot find the greeted account';
   }
   //const info = greetedAccountDataLayout.decode(Buffer.from(accountInfo.data));
   /*
   console.log(
-    greetedPubkey.toBase58(),
+    greetedAccount.publicKey.toBase58(),
     'has been greeted',
     info.numGreets.toString(),
     'times',
   );
   */
- //console.log(greetedPubkey.toBase58(), ":");
+ //console.log(greetedAccount.publicKey.toBase58(), ":");
  //console.log("Account data:", info.account_data.toString());
 }
 
@@ -312,7 +317,7 @@ export async function reportHellos(): Promise<void> {
  * Print given accounts' data
  */
 async function printAccountData(account: PublicKey): Promise<void> {
-  const accountInfo = await connection.getAccountInfo(greetedPubkey);
+  const accountInfo = await connection.getAccountInfo(greetedAccount.publicKey);
   if (accountInfo === null) {
     throw 'Error: cannot get data for account ' + account.toBase58();
   }
@@ -329,17 +334,18 @@ export async function reportAccounts(): Promise<void> {
   console.log("Accounts owned by program:");
   for(let i = 0; i < accounts.length; i++) {
     console.log(accounts[i].pubkey.toBase58());
-    await printAccountData(accounts[i].pubkey);
+    let posts = await getArrayOfPosts(accounts[i].pubkey);
+    console.log(posts);
   }
 }
 
-export async function getArrayOfPosts(): Promise<string[]> {
-  const accountInfo = await connection.getAccountInfo(greetedPubkey);
+export async function getArrayOfPosts(pk: PublicKey): Promise<string[]> {
+  const accountInfo = await connection.getAccountInfo(pk);
   if (accountInfo === null) {
     throw 'Error: cannot get data for account ';
   }
-  if (arrayOfPosts(accountInfo.data, greetedPubkey) != null) {
-    return arrayOfPosts(accountInfo.data, greetedPubkey);
+  if (arrayOfPosts(accountInfo.data, pk) != null) {
+    return arrayOfPosts(accountInfo.data, pk);
   }
   else {
     let x: string[] = [""];

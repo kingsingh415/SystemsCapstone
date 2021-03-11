@@ -33,12 +33,16 @@ async function main() {
     case 0:
       // Get accounts owned by the program
       // await reportAccounts();
+      await reportAccounts();
+      /*
       let view = await getArrayOfPosts();
       for (var val of view) {
         console.log(val); 
       }
+      */
       break;
     case 1:
+      
       // Enter post text
       let postBody = readlineSync.question('Enter your post: ', { hideEchoBack: false });
 
@@ -51,12 +55,13 @@ async function main() {
       // Get accounts owned by the program
       // await reportAccounts();
 
-      let postRet = await getArrayOfPosts();
+      /*let postRet = await getArrayOfPosts();
       for (var val of postRet) {
         console.log(val);
-      }
+      }*/
 
       break;
+    /*
     case 2:
       let ret = await getArrayOfPosts();
       for (var val of ret) {
@@ -75,6 +80,7 @@ async function main() {
       let viewRet = await getArrayOfPosts();
       console.log(viewRet);
       break
+    */
     default:
       break;
   }
