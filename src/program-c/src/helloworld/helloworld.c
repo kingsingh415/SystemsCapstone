@@ -101,26 +101,26 @@ uint64_t parsePost(const uint8_t* d, uint64_t len, Post* p) {
     p->bodyLength = len - 1;
     return 1 + p->bodyLength + sizeof(uint16_t); // Selector + body + size
   case REPLY_SELECTOR:
-    if(len < sizeof(uint16_t) + 1 + sizeof(PostID) + 1) {
-      return 0; // Minimum size of a reply is 38 bytes (size + selector + (32 bytes pubkey + 2 bytes index) + 1 character post)
+    if(len < 1 + sizeof(PostID) + 1) {
+      return 0; // Minimum size of a reply is 36 bytes (selector + (32 bytes pubkey + 2 bytes index) + 1 character post)
     }
     p->id = *((PostID*)&d[1]); // Assume data is already little-endian
     p->postBody = &d[1 + sizeof(PostID)];
     p->bodyLength = len - 1 - sizeof(PostID);
     return sizeof(uint16_t) + 1 + sizeof(PostID) + p->bodyLength;
   case LIKE_SELECTOR:
-    if(len != sizeof(uint16_t) + 1 + sizeof(PostID)) {
-      return 0; // Size of a like is 37 bytes (size + selector + (32 bytes pubkey + 2 bytes index))
+    if(len != 1 + sizeof(PostID)) {
+      return 0; // Size of a like is 35 bytes (selector + (32 bytes pubkey + 2 bytes index))
     }
     p->id = *((PostID*)&d[1]);
     return sizeof(uint16_t) + 1 + sizeof(PostID);
   case REPORT_SELECTOR:
-    if(len < sizeof(uint16_t) + 1 + sizeof(PostID)) {
-      return 0; // Minimum size of a report is 37 bytes (selector + (32 bytes pubkey + 2 bytes index) + 0 character report reason (optional))
+    if(len < 1 + sizeof(PostID) + 1) {
+      return 0; // Minimum size of a report is 36 bytes (selector + (32 bytes pubkey + 2 bytes index) + 1 character report reason)
     }
     p->id = *((PostID*)&d[1]); // Assume data is already little-endian
     p->postBody = &d[1 + sizeof(PostID)];
-    p->bodyLength = len - 1 - sizeof(PostID); // Possibly 0
+    p->bodyLength = len - 1 - sizeof(PostID);
     return sizeof(uint16_t) + 1 + sizeof(PostID) + p->bodyLength;
   default:
     return 0;
@@ -157,8 +157,8 @@ void copyPost(Post* p, uint8_t* account) {
 // TODO
 
 uint64_t helloworld(SolParameters *params) {
-  sol_log("Instruction data:");
-  sol_log_array(params->data, params->data_len);
+  //sol_log("Instruction data:");
+  //sol_log_array(params->data, params->data_len);
   if (params->ka_num < 1) {
     sol_log("Poster's account not included in the instruction");
     return ERROR_NOT_ENOUGH_ACCOUNT_KEYS;

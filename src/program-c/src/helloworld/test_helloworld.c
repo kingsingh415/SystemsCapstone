@@ -79,6 +79,43 @@ Test(hello, reply) {
   SolParameters params = {accounts, sizeof(accounts), instruction_data,
                           sizeof(instruction_data), &program_id};
   cr_assert(SUCCESS == helloworld(&params));
-  sol_log("Account data after successful transaction:");
-  sol_log_array(data, sizeof(data));
+  //sol_log("Account data after successful transaction:");
+  //sol_log_array(data, sizeof(data));
+}
+
+Test(hello, like) {
+  uint8_t instruction_data[1 + sizeof(PostID)] = { 0 };
+  SolPubkey program_id = {.x = {
+                              1,
+                          }};
+  SolPubkey key = {.x = {
+                       2,
+                   }};
+  // Setup like
+  PostID replyTo = { .poster = key, .index = 0 };
+  instruction_data[0] = 'L';
+  sol_memcpy(&instruction_data[1], &replyTo, sizeof(PostID));
+
+  // Setup account data
+  uint64_t lamports = 1;
+  uint8_t data[51] = {0};
+  AccountMetadata* meta = (AccountMetadata*)data;
+  meta->numPosts = 1;
+  uint16_t firstPostLength = 5;
+  sol_memcpy(data + sizeof(AccountMetadata), &firstPostLength, sizeof(uint16_t));
+  sol_memcpy(data + sizeof(AccountMetadata) + sizeof(uint16_t), "Ptest", firstPostLength);
+  SolAccountInfo accounts[] = {{
+      &key,
+      &lamports,
+      sizeof(data),
+      data,
+      &program_id,
+      0,
+      true,
+      true,
+      false,
+  }};
+  SolParameters params = {accounts, sizeof(accounts), instruction_data,
+                          sizeof(instruction_data), &program_id};
+  cr_assert(SUCCESS == helloworld(&params));
 }
