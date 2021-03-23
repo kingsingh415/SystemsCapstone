@@ -25,7 +25,7 @@ import {url, urlTls} from './util/url';
 import {Store} from './util/store';
 import {newAccountWithLamports} from './util/new-account-with-lamports';
 import BaseConverter from 'base-x';
-const bs58 = BaseConverter("base-58");
+const bs58 = BaseConverter("base58");
 /**
  * Connection to the network
  */

@@ -16,6 +16,7 @@ import {
 
 async function main() {
   console.log("--------------------Solana forum demo--------------------");
+  console.log("THIS NO LONGER WORKS PROPERLY!!! USE THE UI INSTEAD");
   const readlineSync = require('readline-sync');
   let options = ["View Posts", "New Post", "Like Post"];
   let response = readlineSync.keyInSelect(options, "Choose one (New post assumes you have a valid store)")
@@ -61,26 +62,19 @@ async function main() {
       }*/
 
       break;
-    /*
     case 2:
-      let ret = await getArrayOfPosts();
-      for (var val of ret) {
-        console.log(val);
-      }
-      let choice = readlineSync.question('Enter which post number you would like to send a like to: ', { hideEchoBack: false });
-      var num: number = +choice;
-      var split = ret[num].split(" - ");
+      
+      //let choice = readlineSync.question('Enter which post number you would like to send a like to: ', { hideEchoBack: false });
+      //var num: number = +choice;
+      //var split = ret[num].split(" - ");
       // console.log(split);
-      await sayHello(split[2], "like");
+      //await sayHello(split[2], "like");
 
       // Find out how many times that account has been greeted
       await reportHellos();
 
-      // Get accounts owned by the program
-      let viewRet = await getArrayOfPosts();
-      console.log(viewRet);
       break
-    */
+    
     default:
       break;
   }
