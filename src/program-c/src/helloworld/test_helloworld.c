@@ -26,19 +26,19 @@ Test(hello, sanity) {
                           sizeof(instruction_data), &program_id};
 
   // Check offset calculation on blank account
-  cr_assert(sizeof(AccountMetadata) == newDataOffset(data, sizeof(data)));
+  cr_assert(sizeof(AccountMetadata) == newPostOffset(data, sizeof(data)));
 
   // Check posting and offset calculation
   cr_assert(SUCCESS == helloworld(&params));
   cr_assert(sizeof(AccountMetadata) + sizeof(instruction_data) + sizeof(uint16_t) 
-            == newDataOffset(data, sizeof(data)));
+            == newPostOffset(data, sizeof(data)));
   Post p;
   cr_assert(sizeof(uint16_t) + sizeof(instruction_data) == parsePost(instruction_data, sizeof(instruction_data), &p));
   AccountMetadata* d = (AccountMetadata*)data;
   cr_assert(1 == d->numPosts);
   cr_assert(SUCCESS == helloworld(&params));
   cr_assert(sizeof(AccountMetadata) + (sizeof(instruction_data) + sizeof(uint16_t)) * 2
-            == newDataOffset(data, sizeof(data)));
+            == newPostOffset(data, sizeof(data)));
   cr_assert(2 == d->numPosts);
 }
 
@@ -59,7 +59,7 @@ Test(hello, reply) {
 
   // Setup account data
   uint64_t lamports = 1;
-  uint8_t data[51] = {0};
+  uint8_t data[1024] = {0};
   AccountMetadata* meta = (AccountMetadata*)data;
   meta->numPosts = 1;
   uint16_t firstPostLength = 5;
@@ -98,7 +98,7 @@ Test(hello, like) {
 
   // Setup account data
   uint64_t lamports = 1;
-  uint8_t data[51] = {0};
+  uint8_t data[1024] = {0};
   AccountMetadata* meta = (AccountMetadata*)data;
   meta->numPosts = 1;
   uint16_t firstPostLength = 5;
@@ -118,4 +118,234 @@ Test(hello, like) {
   SolParameters params = {accounts, sizeof(accounts), instruction_data,
                           sizeof(instruction_data), &program_id};
   cr_assert(SUCCESS == helloworld(&params));
+}
+
+Test(hello, petitionVoteFail) {
+  // Make a post to petition against
+  uint8_t instruction_data[] = { 'P', 't', 'e', 's', 't'};
+  SolPubkey program_id = {.x = {
+                              1,
+                          }};
+  SolPubkey key = {.x = {
+                       2,
+                   }};
+  uint64_t lamports = 1;
+  uint8_t data[1024] = {0};
+  SolAccountInfo accounts[] = {{
+      &key,
+      &lamports,
+      sizeof(data),
+      data,
+      &program_id,
+      0,
+      true,
+      true,
+      false,
+  }};
+  SolParameters params = {accounts, sizeof(accounts), instruction_data,
+                          sizeof(instruction_data), &program_id};
+
+  // Check offset calculation on blank account
+  cr_assert(sizeof(AccountMetadata) == newPostOffset(data, sizeof(data)));
+
+  // Check posting and offset calculation
+  cr_assert(SUCCESS == helloworld(&params));
+  cr_assert(sizeof(AccountMetadata) + sizeof(instruction_data) + sizeof(uint16_t) 
+            == newPostOffset(data, sizeof(data)));
+  Post p;
+  cr_assert(sizeof(uint16_t) + sizeof(instruction_data) == parsePost(instruction_data, sizeof(instruction_data), &p));
+  AccountMetadata* d = (AccountMetadata*)data;
+  cr_assert(1 == d->numPosts);
+  cr_assert(SUCCESS == helloworld(&params));
+  cr_assert(sizeof(AccountMetadata) + (sizeof(instruction_data) + sizeof(uint16_t)) * 2
+            == newPostOffset(data, sizeof(data)));
+  cr_assert(2 == d->numPosts);
+
+  // Create a petition account
+  uint8_t vote_instruction_data[] = { 'V', 1 };
+  SolPubkey petitionKey = { .x = { 3, }};
+  PostID offender = { .poster = key, .index = 0 };
+  // The petition holds 1 signature
+  uint8_t petitionData[sizeof(PetitionAccountMeta) + (1 * sizeof(PetitionSignature))] = { 0 };
+  initializePetitionAccount(petitionData, sizeof(petitionData), &offender);
+  // Vote on the petition
+  SolAccountInfo voteAccounts[] = {
+    {
+      &key,
+      &lamports,
+      sizeof(data),
+      data,
+      &program_id,
+      0,
+      true,
+      true,
+      false,
+    },
+    {
+      &petitionKey,
+      &lamports,
+      sizeof(petitionData),
+      petitionData,
+      &program_id,
+      0,
+      false,
+      true,
+      false,
+    },
+    {
+      &key,
+      &lamports,
+      sizeof(data),
+      data,
+      &program_id,
+      0,
+      false,
+      true,
+      false,
+    }
+  };
+  SolParameters voteParams = {voteAccounts, SOL_ARRAY_SIZE(voteAccounts), vote_instruction_data,
+                          sizeof(vote_instruction_data), &program_id};
+  cr_assert(SUCCESS == helloworld(&voteParams));
+}
+
+Test(hello, petitionVoteSucceed) {
+  // Make a post to petition against
+  uint8_t instruction_data[] = { 'P', 't', 'e', 's', 't'};
+  SolPubkey program_id = {.x = {
+                              1,
+                          }};
+  SolPubkey key = {.x = {
+                       2,
+                   }};
+  uint64_t lamports = 1;
+  uint8_t data[100] = {0};
+  SolAccountInfo accounts[] = {{
+      &key,
+      &lamports,
+      sizeof(data),
+      data,
+      &program_id,
+      0,
+      true,
+      true,
+      false,
+  }};
+  SolParameters params = {accounts, sizeof(accounts), instruction_data,
+                          sizeof(instruction_data), &program_id};
+
+  // Check offset calculation on blank account
+  cr_assert(sizeof(AccountMetadata) == newPostOffset(data, sizeof(data)));
+
+  // Check posting and offset calculation
+  cr_assert(SUCCESS == helloworld(&params));
+  cr_assert(sizeof(AccountMetadata) + sizeof(instruction_data) + sizeof(uint16_t) 
+            == newPostOffset(data, sizeof(data)));
+  Post p;
+  cr_assert(sizeof(uint16_t) + sizeof(instruction_data) == parsePost(instruction_data, sizeof(instruction_data), &p));
+  AccountMetadata* d = (AccountMetadata*)data;
+  cr_assert(1 == d->numPosts);
+  cr_assert(SUCCESS == helloworld(&params));
+  cr_assert(sizeof(AccountMetadata) + (sizeof(instruction_data) + sizeof(uint16_t)) * 2
+            == newPostOffset(data, sizeof(data)));
+  cr_assert(2 == d->numPosts);
+
+  // Create a petition account
+  uint8_t vote_instruction_data[] = { 'V', 1 };
+  SolPubkey petitionKey = { .x = { 3, }};
+  PostID offender = { .poster = key, .index = 0 };
+  // The petition holds 1 signature
+  uint8_t petitionData[sizeof(PetitionAccountMeta) + (1 * sizeof(PetitionSignature))] = { 0 };
+  initializePetitionAccount(petitionData, sizeof(petitionData), &offender);
+  // Vote on the petition
+  SolAccountInfo voteAccounts[] = {
+    {
+      &key,
+      &lamports,
+      sizeof(data),
+      data,
+      &program_id,
+      0,
+      true,
+      true,
+      false,
+    },
+    {
+      &petitionKey,
+      &lamports,
+      sizeof(petitionData),
+      petitionData,
+      &program_id,
+      0,
+      false,
+      true,
+      false,
+    },
+    {
+      &key,
+      &lamports,
+      sizeof(data),
+      data,
+      &program_id,
+      0,
+      false,
+      true,
+      false,
+    }
+  };
+  SolParameters voteParams = {voteAccounts, SOL_ARRAY_SIZE(voteAccounts), vote_instruction_data,
+                          sizeof(vote_instruction_data), &program_id};
+  cr_assert(SUCCESS == helloworld(&voteParams));
+  sol_log_array(data, sizeof(data));
+}
+
+Test(hello, createPetition) {
+  uint8_t instruction_data[] = { 'C', 0, 0 };
+  SolPubkey program_id = {.x = {
+                              1,
+                          }};
+  SolPubkey key = {.x = {
+                       2,
+                   }};
+  SolPubkey offenderKey = {.x = {
+                       3,
+                   }};
+  uint64_t lamports = 1;
+  uint8_t data[1024] = {0};
+  uint8_t offenderData[512] = {0};
+  SolAccountInfo accounts[] = {
+      {
+      &key,
+      &lamports,
+      sizeof(data),
+      data,
+      &program_id,
+      0,
+      true,
+      true,
+      false,
+    },
+    {
+      &offenderKey,
+      &lamports,
+      sizeof(offenderData),
+      offenderData,
+      &program_id,
+      0,
+      false,
+      true,
+      false,
+    },
+  };
+  SolParameters params = {accounts, SOL_ARRAY_SIZE(accounts), instruction_data,
+                          sizeof(instruction_data), &program_id};
+
+  cr_assert(SUCCESS == helloworld(&params));
+  PetitionAccountMeta* meta = (PetitionAccountMeta*)data;
+  cr_assert(meta->accountType == Petition);
+  cr_assert(meta->netTally == 0);
+  cr_assert(meta->numSignatures == 0);
+  cr_assert(meta->reputationRequirement == 0);
+  cr_assert(meta->offendingPost.index == 0);
+  cr_assert(SolPubkey_same(&offenderKey, &meta->offendingPost.poster));
 }
