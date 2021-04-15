@@ -299,6 +299,7 @@ void redactPost(SolAccountInfo* offender, uint16_t index) {
 // The first account must be the petition account
 // The second account must be the offender's account
 // The rest of the accounts must be the accounts in the petition in the order they appear
+// TODO this still requires the petition account's signature because of the factored check in main
 uint64_t processPetitionOutcome(SolParameters* params) {
   if(params->ka_num < 3) {
     sol_log("Must provide at least 3 accounts to process a petition, got:");
@@ -454,6 +455,11 @@ uint64_t processPost(SolParameters* params) {
     return ERROR_INVALID_INSTRUCTION_DATA;
   }
 
+  if(!posterAccount->is_signer) {
+    sol_log("The poster must sign this instruction");
+    return ERROR_MISSING_REQUIRED_SIGNATURES;
+  }
+
   // Ensure that the account is initialized
   uint64_t result = ensureInitializedUser(posterAccount);
   if(result != SUCCESS) {
@@ -523,6 +529,11 @@ uint64_t processVote(SolParameters* params) {
   SolAccountInfo* petitionAccount = &params->ka[1];
   SolAccountInfo* offendingAccount = &params->ka[2];
 
+  if(!votingAccount->is_signer) {
+    sol_log("The voter must sign this instruction");
+    return ERROR_MISSING_REQUIRED_SIGNATURES;
+  }
+
   if(!isInitialized(petitionAccount->data)) {
     sol_log("Cannot vote on an uninitialized petition");
     return ERROR_UNINITIALIZED_ACCOUNT;
@@ -588,6 +599,11 @@ uint64_t createPetition(SolParameters* params) {
   SolAccountInfo* petitionAccount = (SolAccountInfo*)&params->ka[0];
   SolAccountInfo* offendingAccount = (SolAccountInfo*)&params->ka[1];
 
+  if(!petitionAccount->is_signer) {
+    sol_log("The petition account must sign");
+    return ERROR_MISSING_REQUIRED_SIGNATURES;
+  }
+
   if(isInitialized(petitionAccount->data)) {
     sol_log("Cannot create a petition on an initialized account");
     return ERROR_INVALID_ACCOUNT_DATA;
@@ -608,19 +624,8 @@ uint64_t helloworld(SolParameters *params) {
     return ERROR_NOT_ENOUGH_ACCOUNT_KEYS;
   }
 
-  if(params->data_len < 1) {
-    sol_log("Empty instruction");
-    return ERROR_INVALID_INSTRUCTION_DATA;
-  }
-
   // The first account is always the user requesting the transaction
   SolAccountInfo* userAccount = &params->ka[0];
-
-  // The user's account must have signed off on this transaction
-  if(!userAccount->is_signer) {
-    sol_log("The user's account must sign off on any transaction");
-    return ERROR_MISSING_REQUIRED_SIGNATURES;
-  }
 
   // The account must be owned by the program in order to modify its data
   if (!SolPubkey_same(userAccount->owner, params->program_id)) {
