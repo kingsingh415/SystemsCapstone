@@ -155,6 +155,7 @@ Test(hello, petitionVoteFail) {
   Post p;
   cr_assert(sizeof(uint16_t) + sizeof(instruction_data) == parsePost(instruction_data, sizeof(instruction_data), &p));
   AccountMetadata* d = (AccountMetadata*)data;
+  d->reputation = 5;
   cr_assert(1 == d->numPosts);
   cr_assert(SUCCESS == helloworld(&params));
   cr_assert(sizeof(AccountMetadata) + (sizeof(instruction_data) + sizeof(uint16_t)) * 2
@@ -167,7 +168,7 @@ Test(hello, petitionVoteFail) {
   PostID offender = { .poster = key, .index = 0 };
   // The petition holds 1 signature
   uint8_t petitionData[sizeof(PetitionAccountMeta) + (1 * sizeof(PetitionSignature))] = { 0 };
-  initializePetitionAccount(petitionData, sizeof(petitionData), &offender);
+  initializePetitionAccount(petitionData, sizeof(petitionData), &offender, data, sizeof(data));
   // Vote on the petition
   SolAccountInfo voteAccounts[] = {
     {
@@ -206,7 +207,7 @@ Test(hello, petitionVoteFail) {
   };
   SolParameters voteParams = {voteAccounts, SOL_ARRAY_SIZE(voteAccounts), vote_instruction_data,
                           sizeof(vote_instruction_data), &program_id};
-  cr_assert(SUCCESS == helloworld(&voteParams));
+  cr_assert(SUCCESS != helloworld(&voteParams));
 }
 
 Test(hello, petitionVoteSucceed) {
@@ -256,7 +257,7 @@ Test(hello, petitionVoteSucceed) {
   PostID offender = { .poster = key, .index = 0 };
   // The petition holds 1 signature
   uint8_t petitionData[sizeof(PetitionAccountMeta) + (1 * sizeof(PetitionSignature))] = { 0 };
-  initializePetitionAccount(petitionData, sizeof(petitionData), &offender);
+  initializePetitionAccount(petitionData, sizeof(petitionData), &offender, data, sizeof(data));
   // Vote on the petition
   SolAccountInfo voteAccounts[] = {
     {
@@ -295,7 +296,9 @@ Test(hello, petitionVoteSucceed) {
   };
   SolParameters voteParams = {voteAccounts, SOL_ARRAY_SIZE(voteAccounts), vote_instruction_data,
                           sizeof(vote_instruction_data), &program_id};
+  d->reputation = 1;
   cr_assert(SUCCESS == helloworld(&voteParams));
+  cr_assert(d->reputation == 1); // Reputation will be unchanged because the penalty for getting petitioned and the reward for voting correctly are the same
   sol_log_array(data, sizeof(data));
 }
 
@@ -345,7 +348,6 @@ Test(hello, createPetition) {
   cr_assert(meta->accountType == Petition);
   cr_assert(meta->netTally == 0);
   cr_assert(meta->numSignatures == 0);
-  cr_assert(meta->reputationRequirement == 0);
   cr_assert(meta->offendingPost.index == 0);
   cr_assert(SolPubkey_same(&offenderKey, &meta->offendingPost.poster));
 }

@@ -39,6 +39,7 @@ typedef struct {
 typedef struct {
   uint8_t accountType;
   PostID offendingPost;
+  uint8_t completed;
   int64_t netTally;
   uint64_t reputationRequirement;
   uint16_t numSignatures;
@@ -105,6 +106,7 @@ typedef struct {
 // Petition instructions
 #define VOTE_SELECTOR 'V'
 #define CREATE_PETITION_SELECTOR 'C'
+#define PROCESS_PETITION_SELECTOR 'F'
 
 // Misc.
 #define SET_USERNAME_SELECTOR 's'
@@ -222,16 +224,26 @@ void initializeUserAccount(uint8_t* data, uint64_t length) {
   meta->accountType = User;
 }
 
-void initializePetitionAccount(uint8_t* data, uint64_t length, PostID* offender) {
-  PetitionAccountMeta* account = (PetitionAccountMeta*)data;
-  account->accountType = Petition;
-  account->offendingPost = *offender;
-  // TODO set reputation requirement
-}
-
 // Number of signatures that will fit in the account of given length
 uint64_t signatureCapacity(uint64_t length) {
   return (length - sizeof(PetitionAccountMeta)) / sizeof(PetitionSignature);
+}
+
+// Returns the minimum reputation needed to vote on a petition against
+// a user with the given rep
+uint64_t votingRequirement(uint64_t offenderReputation, uint64_t numVotes) {
+  return (offenderReputation / numVotes) + 1;
+}
+
+void initializePetitionAccount(uint8_t* data, uint64_t length, PostID* offender,
+                               uint8_t* offenderData, uint64_t offenderDataLength) {
+  PetitionAccountMeta* account = (PetitionAccountMeta*)data;
+  account->accountType = Petition;
+  account->offendingPost = *offender;
+  // set reputation requirement so that a majority vote will always win
+  AccountMetadata* offenderMeta = (AccountMetadata*)offenderData;
+  account->reputationRequirement = votingRequirement(offenderMeta->reputation, signatureCapacity(length));
+  account->completed = 0;
 }
 
 // Returns true if the given user can vote on the given petition
@@ -284,33 +296,123 @@ void redactPost(SolAccountInfo* offender, uint16_t index) {
 
 // Processes the outcome of a vote
 // A tie is broken by the petition failing
-void processPetitionOutcome(SolAccountInfo* petition, SolAccountInfo* offender) {
+// The first account must be the petition account
+// The second account must be the offender's account
+// The rest of the accounts must be the accounts in the petition in the order they appear
+uint64_t processPetitionOutcome(SolParameters* params) {
+  if(params->ka_num < 3) {
+    sol_log("Must provide at least 3 accounts to process a petition, got:");
+    sol_log_64(params->ka_num, 0, 0, 0, 0);
+    return ERROR_NOT_ENOUGH_ACCOUNT_KEYS;
+  }
+
+  // No instruction data is required
+  if(params->data_len != 0) {
+    sol_log("No instruction data is necessary for this instruction");
+    return ERROR_INVALID_INSTRUCTION_DATA;
+  }
+
+  SolAccountInfo* petitionAccount = &params->ka[0];
+  SolAccountInfo* offenderAccount = &params->ka[1];
+  SolAccountInfo* voterAccounts = &params->ka[2];
+
+  if(!isInitialized(petitionAccount->data)) {
+    sol_log("This petition is not initialized");
+    return ERROR_UNINITIALIZED_ACCOUNT;
+  }
+
+  // Check if the petition is already completed
+  PetitionAccountMeta* petition = (PetitionAccountMeta*)(petitionAccount->data);
+  if(petition->completed) {
+    sol_log("Petition is already completed.");
+    return ERROR_INVALID_ACCOUNT_DATA;
+  }
+  
+  if(petition->numSignatures != signatureCapacity(petitionAccount->data_len)) {
+    sol_log("Petition is not full yet.");
+    sol_log_64(petition->numSignatures, signatureCapacity(petitionAccount->data_len), 0, 0, 0);
+    return ERROR_INVALID_ACCOUNT_DATA;
+  }
+
   int64_t voteTally = 0;
-  PetitionAccountMeta* petitionMeta = (PetitionAccountMeta*)petition->data;
-  PetitionSignature* signatureArray = (PetitionSignature*)&petition->data[sizeof(PetitionAccountMeta)];
+  PetitionAccountMeta* petitionMeta = (PetitionAccountMeta*)petitionAccount->data;
+  PetitionSignature* signatureArray = (PetitionSignature*)&petitionAccount->data[sizeof(PetitionAccountMeta)];
+  // Before modifying anything, reject the transaction if any of the account parameters are incorrect
+  if(!SolPubkey_same(&petitionMeta->offendingPost.poster, offenderAccount->key)) {
+    sol_log("Second account parameter must be the offender's account");
+    return ERROR_INVALID_ARGUMENT;
+  }
+  if(params->ka_num - 2 != petitionMeta->numSignatures) {
+    sol_log("Invalid number of account parameters");
+    sol_log("Expected:");
+    sol_log_64(petitionMeta->numSignatures, 0, 0, 0, 0);
+    sol_log("Got:");
+    sol_log_64(params->ka_num - 2, 0, 0, 0, 0);
+    return ERROR_INVALID_ARGUMENT;
+  }
+  for(uint64_t i = 0; i < petitionMeta->numSignatures; i++) {
+    // Check to ensure that the correct accounts were passed in
+    // in the correct order
+    if(!SolPubkey_same(&signatureArray[i].signer, voterAccounts[i].key)) {
+      sol_log("Invalid account parameter for petition slot:");
+      sol_log_64(i, 0, 0, 0, 0);
+      sol_log("Expected:");
+      sol_log_pubkey(&signatureArray[i].signer);
+      sol_log("Got:");
+      sol_log_pubkey(voterAccounts[i].key);
+      return ERROR_INVALID_ARGUMENT;
+    }
+  }
+
+  // We may complete the petition.
+  petitionMeta->completed = true;
+
   for(uint64_t i = 0; i < petitionMeta->numSignatures; i++) {
     if(signatureArray[i].vote) {
       voteTally++;
-      sol_log("Counted 1 vote for:");
+      //sol_log("Counted 1 vote for:");
     }
     else {
-      sol_log("Counted 1 vote against:");
+      //sol_log("Counted 1 vote against:");
       voteTally--;
     }
-    sol_log_64(signatureArray[i].vote, 0, 0, 0, 0);
+    //sol_log_64(signatureArray[i].vote, 0, 0, 0, 0);
   }
+  
+  bool petitionOutcome = voteTally > 0;
   // The petition succeeds! Redact the post.
-  if(voteTally > 0) {
+  if(petitionOutcome) {
     sol_log("Petition succeeded!");
-    sol_assert(SolPubkey_same(offender->key, &petitionMeta->offendingPost.poster));
-    redactPost(offender, petitionMeta->offendingPost.index);
+    //sol_assert(SolPubkey_same(offenderAccount->key, &petitionMeta->offendingPost.poster));
+    redactPost(offenderAccount, petitionMeta->offendingPost.index);
+    AccountMetadata* offenderMeta = (AccountMetadata*)offenderAccount->data;
+    offenderMeta->reputation -= voteTally * petitionMeta->reputationRequirement;
   }
   // The petition failed.
   else {
     sol_log("Petition failed.");
   }
+  // Distribute rewards and penalties
+  for(uint64_t i = 0; i < petitionMeta->numSignatures; i++) {
+    AccountMetadata* voterMeta = (AccountMetadata*)&voterAccounts[i].data;
+    if(signatureArray[i].vote == petitionOutcome) {
+      // Reward this user
+      sol_log("Rewarding user:");
+      voterMeta->reputation += petitionMeta->reputationRequirement;
+    }
+    else {
+      // Penalize this user
+      sol_log("Penalizing user:");
+      voterMeta->reputation -= petitionMeta->reputationRequirement;
+    }
+    sol_log_pubkey(&signatureArray[i].signer);
+    sol_log("For this amount of reputation:");
+    sol_log_64(petitionMeta->reputationRequirement, 0, 0, 0, 0);
+  }
   sol_log("Vote tally:");
   sol_log_64(voteTally, 0, 0, 0, 0);
+
+  return SUCCESS;
 }
 
 // Ensure a user account is initialized
@@ -453,9 +555,12 @@ uint64_t processVote(SolParameters* params) {
   petition->numSignatures++;
 
   // If that was the last signature, determine the outcome of the vote
+  // This is now handled in a separate transaction
+  /*
   if(petition->numSignatures == signatureCapacity(petitionAccount->data_len)) {
     processPetitionOutcome(petitionAccount, offendingAccount);
   }
+  */
 
   return SUCCESS;
 }
@@ -489,7 +594,7 @@ uint64_t createPetition(SolParameters* params) {
   }
 
   PostID offendingPost = { .poster = *offendingAccount->key, .index = *(uint16_t*)(&params->data[1]) };
-  initializePetitionAccount(petitionAccount->data, petitionAccount->data_len, &offendingPost);
+  initializePetitionAccount(petitionAccount->data, petitionAccount->data_len, &offendingPost, offendingAccount->data, offendingAccount->data_len);
 
   return SUCCESS;
 }
@@ -534,6 +639,8 @@ uint64_t helloworld(SolParameters *params) {
     return processVote(params);
   case CREATE_PETITION_SELECTOR:
     return createPetition(params);
+  case PROCESS_PETITION_SELECTOR:
+    return processPetitionOutcome(params);
   default:
     sol_log("Invalid instruction selector");
     return ERROR_INVALID_INSTRUCTION_DATA;
