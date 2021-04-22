@@ -666,7 +666,7 @@ uint64_t helloworld(SolParameters *params) {
 extern uint64_t entrypoint(const uint8_t *input) {
   sol_log("Helloworld C program entrypoint");
 
-  SolAccountInfo accounts[1];
+  SolAccountInfo accounts[2];
   SolParameters params = (SolParameters){.ka = accounts};
 
   if (!sol_deserialize(input, &params, SOL_ARRAY_SIZE(accounts))) {
