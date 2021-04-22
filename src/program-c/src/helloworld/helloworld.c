@@ -507,7 +507,6 @@ Vote insruction processor
 Expects 3 accounts:
   -The account voting
   -The account containing the petition
-  -The account referenced by the petition (offending account)
 Only the first must be a signer.
 */
 uint64_t processVote(SolParameters* params) {
@@ -583,6 +582,7 @@ Expects 2 accounts:
   -The account that the petition is against (offending account)
 */
 uint64_t createPetition(SolParameters* params) {
+  
   if(params->ka_num != 2) {
     sol_log("2 account parameters are needed to create a new petition, Got:");
     sol_log_64(params->ka_num, 0, 0, 0, 0);
@@ -595,21 +595,30 @@ uint64_t createPetition(SolParameters* params) {
     sol_log_64(params->data_len, 0, 0, 0, 0);
     return ERROR_INVALID_INSTRUCTION_DATA;
   }
-
+  sol_log_64(16, 0, 0, 0, 0);
   SolAccountInfo* petitionAccount = (SolAccountInfo*)&params->ka[0];
   SolAccountInfo* offendingAccount = (SolAccountInfo*)&params->ka[1];
-
+  sol_log_64((uint64_t)petitionAccount, petitionAccount->is_writable, petitionAccount->is_signer, sizeof(SolAccountInfo*), sizeof(SolAccountInfo));
+  sol_log_64((uint64_t)offendingAccount, 0, 0, 0, 0);
+  sol_log_64(offendingAccount->is_writable, offendingAccount->is_signer, 0, 0, 0);
+  sol_log_64(17, 0, 0, 0, 0);
   if(!petitionAccount->is_signer) {
     sol_log("The petition account must sign");
     return ERROR_MISSING_REQUIRED_SIGNATURES;
   }
-
+  sol_log_64(18, 0, 0, 0, 0);
   if(isInitialized(petitionAccount->data)) {
     sol_log("Cannot create a petition on an initialized account");
     return ERROR_INVALID_ACCOUNT_DATA;
   }
-
-  PostID offendingPost = { .poster = *offendingAccount->key, .index = *(uint16_t*)(&params->data[1]) };
+  sol_log_64(19, 0, 0, 0, 0);
+  PostID offendingPost;
+  sol_log_64(20, 0, 0, 0, 0);
+  offendingPost.poster = *offendingAccount->key;
+  sol_log_64(21, 0, 0, 0, 0);
+  offendingPost.index = *(uint16_t*)(&params->data[1]);
+  sol_log_64(22, 0, 0, 0, 0);
+  sol_log("About to initialize petition account");
   initializePetitionAccount(petitionAccount->data, petitionAccount->data_len, &offendingPost, offendingAccount->data, offendingAccount->data_len);
 
   return SUCCESS;
@@ -619,6 +628,8 @@ uint64_t createPetition(SolParameters* params) {
 uint64_t helloworld(SolParameters *params) {
   //sol_log("Instruction data:");
   //sol_log_array(params->data, params->data_len);
+  sol_log_params(params);
+  //sol_log_64((uint64_t)params, params->ka_num, params->ka_num, 357, 357);
   if (params->ka_num < 1) {
     sol_log("No accounts were included in the instruction");
     return ERROR_NOT_ENOUGH_ACCOUNT_KEYS;
@@ -651,7 +662,7 @@ uint64_t helloworld(SolParameters *params) {
     return ERROR_INVALID_INSTRUCTION_DATA;
   }
 }
-
+#define OFFSETOF(TYPE, ELEMENT) ((size_t)&(((TYPE *)0)->ELEMENT))
 extern uint64_t entrypoint(const uint8_t *input) {
   sol_log("Helloworld C program entrypoint");
 
@@ -661,6 +672,6 @@ extern uint64_t entrypoint(const uint8_t *input) {
   if (!sol_deserialize(input, &params, SOL_ARRAY_SIZE(accounts))) {
     return ERROR_INVALID_ARGUMENT;
   }
-
+  
   return helloworld(&params);
 }

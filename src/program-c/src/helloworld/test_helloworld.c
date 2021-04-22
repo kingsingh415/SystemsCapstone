@@ -10,7 +10,7 @@ Test(hello, sanity) {
                        2,
                    }};
   uint64_t lamports = 1;
-  uint8_t data[1024] = {0};
+  uint8_t data[128] = {0};
   SolAccountInfo accounts[] = {{
       &key,
       &lamports,
@@ -22,7 +22,7 @@ Test(hello, sanity) {
       true,
       false,
   }};
-  SolParameters params = {accounts, sizeof(accounts), instruction_data,
+  SolParameters params = {accounts, sizeof(accounts) / sizeof(accounts[0]), instruction_data,
                           sizeof(instruction_data), &program_id};
 
   // Check offset calculation on blank account
@@ -59,12 +59,10 @@ Test(hello, reply) {
 
   // Setup account data
   uint64_t lamports = 1;
-  uint8_t data[1024] = {0};
+  uint8_t data[100] = {0};
   AccountMetadata* meta = (AccountMetadata*)data;
-  meta->numPosts = 1;
+  initializeUserAccount(data, sizeof(data));
   uint16_t firstPostLength = 5;
-  sol_memcpy(data + sizeof(AccountMetadata), &firstPostLength, sizeof(uint16_t));
-  sol_memcpy(data + sizeof(AccountMetadata) + sizeof(uint16_t), "Ptest", firstPostLength);
   SolAccountInfo accounts[] = {{
       &key,
       &lamports,
@@ -76,9 +74,16 @@ Test(hello, reply) {
       true,
       false,
   }};
-  SolParameters params = {accounts, sizeof(accounts), instruction_data,
+  SolParameters postParams = {accounts, sizeof(accounts) / sizeof(accounts[0]), (unsigned char*)"Ptest",
+                          firstPostLength, &program_id};
+  cr_assert(SUCCESS == helloworld(&postParams));
+  cr_assert(meta->numPosts == 1);
+  cr_assert(meta->accountType == User);
+  SolParameters params = {accounts, sizeof(accounts) / sizeof(accounts[0]), instruction_data,
                           sizeof(instruction_data), &program_id};
   cr_assert(SUCCESS == helloworld(&params));
+  cr_assert(meta->numPosts == 2);
+  sol_log_array(data, sizeof(data));
   //sol_log("Account data after successful transaction:");
   //sol_log_array(data, sizeof(data));
 }
@@ -98,7 +103,7 @@ Test(hello, like) {
 
   // Setup account data
   uint64_t lamports = 1;
-  uint8_t data[1024] = {0};
+  uint8_t data[128] = {0};
   AccountMetadata* meta = (AccountMetadata*)data;
   meta->numPosts = 1;
   uint16_t firstPostLength = 5;
@@ -115,7 +120,7 @@ Test(hello, like) {
       true,
       false,
   }};
-  SolParameters params = {accounts, sizeof(accounts), instruction_data,
+  SolParameters params = {accounts, sizeof(accounts) / sizeof(accounts[0]), instruction_data,
                           sizeof(instruction_data), &program_id};
   cr_assert(SUCCESS == helloworld(&params));
 }
@@ -130,7 +135,7 @@ Test(hello, petitionVoteFail) {
                        2,
                    }};
   uint64_t lamports = 1;
-  uint8_t data[1024] = {0};
+  uint8_t data[128] = {0};
   SolAccountInfo accounts[] = {{
       &key,
       &lamports,
@@ -142,7 +147,7 @@ Test(hello, petitionVoteFail) {
       true,
       false,
   }};
-  SolParameters params = {accounts, sizeof(accounts), instruction_data,
+  SolParameters params = {accounts, sizeof(accounts) / sizeof(accounts[0]), instruction_data,
                           sizeof(instruction_data), &program_id};
 
   // Check offset calculation on blank account
@@ -232,7 +237,7 @@ Test(hello, petitionVoteSucceed) {
       true,
       false,
   }};
-  SolParameters params = {accounts, sizeof(accounts), instruction_data,
+  SolParameters params = {accounts, sizeof(accounts) / sizeof(accounts[0]), instruction_data,
                           sizeof(instruction_data), &program_id};
 
   // Check offset calculation on blank account
@@ -299,7 +304,7 @@ Test(hello, petitionVoteSucceed) {
   d->reputation = 1;
   cr_assert(SUCCESS == helloworld(&voteParams));
   cr_assert(d->reputation == 1); // Reputation will be unchanged because the penalty for getting petitioned and the reward for voting correctly are the same
-  sol_log_array(data, sizeof(data));
+  //sol_log_array(data, sizeof(data));
 }
 
 Test(hello, createPetition) {
@@ -314,8 +319,8 @@ Test(hello, createPetition) {
                        3,
                    }};
   uint64_t lamports = 1;
-  uint8_t data[1024] = {0};
-  uint8_t offenderData[512] = {0};
+  uint8_t data[128] = {0};
+  uint8_t offenderData[128] = {0};
   SolAccountInfo accounts[] = {
       {
       &key,
@@ -350,4 +355,6 @@ Test(hello, createPetition) {
   cr_assert(meta->numSignatures == 0);
   cr_assert(meta->offendingPost.index == 0);
   cr_assert(SolPubkey_same(&offenderKey, &meta->offendingPost.poster));
+  sol_log("Offsets of accountType, numPosts:");
+  sol_log_64(OFFSETOF(AccountMetadata, accountType), OFFSETOF(AccountMetadata, numPosts), sizeof(AccountMetadata), 4, 5);
 }
