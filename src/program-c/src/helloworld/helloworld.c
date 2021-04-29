@@ -310,8 +310,8 @@ uint64_t processPetitionOutcome(SolParameters* params) {
     return ERROR_NOT_ENOUGH_ACCOUNT_KEYS;
   }
 
-  // No instruction data is required
-  if(params->data_len != 0) {
+  // No instruction data is required (aside from the selector)
+  if(params->data_len != 1) {
     sol_log("No instruction data is necessary for this instruction");
     return ERROR_INVALID_INSTRUCTION_DATA;
   }
@@ -419,7 +419,7 @@ uint64_t processPetitionOutcome(SolParameters* params) {
   return SUCCESS;
 }
 
-// Ensure a user account is initialized
+// Ensure a user account is initialized 
 uint64_t ensureInitializedUser(SolAccountInfo* account) {
   /*
   If the poster's account doesn't even have enough to store metadata, 
