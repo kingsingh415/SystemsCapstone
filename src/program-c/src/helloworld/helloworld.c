@@ -41,7 +41,7 @@ typedef struct {
   PostID offendingPost;
   uint8_t completed;
   int64_t netTally;
-  uint64_t reputationRequirement;
+  uint32_t reputationRequirement;
   uint16_t numSignatures;
 } PetitionAccountMeta;
 
@@ -240,6 +240,7 @@ void initializePetitionAccount(uint8_t* data, uint64_t length, PostID* offender,
   PetitionAccountMeta* account = (PetitionAccountMeta*)data;
   account->accountType = Petition;
   account->offendingPost = *offender;
+  account->numSignatures = 0;
   // set reputation requirement so that a majority vote will always win
   AccountMetadata* offenderMeta = (AccountMetadata*)offenderData;
   account->reputationRequirement = votingRequirement(offenderMeta->reputation, signatureCapacity(length));
@@ -504,14 +505,14 @@ uint64_t processPost(SolParameters* params) {
 
 /*
 Vote insruction processor
-Expects 3 accounts:
+Expects 2 accounts:
   -The account voting
   -The account containing the petition
 Only the first must be a signer.
 */
 uint64_t processVote(SolParameters* params) {
-  if(params->ka_num != 3) {
-    sol_log("3 account parameters are needed to vote, Got:");
+  if(params->ka_num != 2) {
+    sol_log("2 account parameters are needed to vote, Got:");
     sol_log_64(params->ka_num, 0, 0, 0, 0);
     return ERROR_NOT_ENOUGH_ACCOUNT_KEYS;
   }
@@ -526,7 +527,6 @@ uint64_t processVote(SolParameters* params) {
 
   SolAccountInfo* votingAccount = &params->ka[0];
   SolAccountInfo* petitionAccount = &params->ka[1];
-  SolAccountInfo* offendingAccount = &params->ka[2];
 
   if(!votingAccount->is_signer) {
     sol_log("The voter must sign this instruction");
@@ -623,12 +623,13 @@ uint64_t createPetition(SolParameters* params) {
 
   return SUCCESS;
 }
-
+#define OFFSETOF(TYPE, ELEMENT) ((size_t)&(((TYPE *)0)->ELEMENT))
 // Main function and entry point
 uint64_t helloworld(SolParameters *params) {
   //sol_log("Instruction data:");
   //sol_log_array(params->data, params->data_len);
-  sol_log_params(params);
+  //sol_log_params(params);
+  sol_log_64(sizeof(PetitionAccountMeta), OFFSETOF(PetitionAccountMeta, numSignatures), OFFSETOF(PetitionAccountMeta, reputationRequirement), OFFSETOF(PetitionAccountMeta, offendingPost), sizeof(PetitionSignature));
   //sol_log_64((uint64_t)params, params->ka_num, params->ka_num, 357, 357);
   if (params->ka_num < 1) {
     sol_log("No accounts were included in the instruction");
@@ -662,7 +663,7 @@ uint64_t helloworld(SolParameters *params) {
     return ERROR_INVALID_INSTRUCTION_DATA;
   }
 }
-#define OFFSETOF(TYPE, ELEMENT) ((size_t)&(((TYPE *)0)->ELEMENT))
+
 extern uint64_t entrypoint(const uint8_t *input) {
   sol_log("Helloworld C program entrypoint");
 
