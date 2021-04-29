@@ -150,9 +150,9 @@ Returns the number of bytes needed to store the post, or 0 if the
 post is invalid
 */
 uint64_t parsePost(const uint8_t* d, uint64_t len, Post* p) {
-  if(len < 4) {
-    return 0; // Minimum size of a post is 4 bytes:
-              // (size + selector + 1 character post)
+  if(len < 2) {
+    return 0; // Minimum size of a post is 2 bytes:
+              // (selector + 1 character post)
   }
   p->typeSelector = *d;
   p->length = len;
