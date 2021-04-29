@@ -206,6 +206,7 @@ Test(hello, petitionVoteFail) {
 
 Test(hello, petitionVoteSucceed) {
   // Make a post to petition against
+  //sol_log_64(1, 2, 4, 8, sizeof(PetitionSignature));
   uint8_t instruction_data[] = { 'P', 't', 'e', 's', 't'};
   SolPubkey program_id = {.x = {
                               1,

@@ -95,6 +95,9 @@ typedef struct {
 // The size of a new petition account instruction
 // selector + post index
 #define CREATE_PETITION_INSTRUCTION_SIZE (1 + sizeof(uint16_t))
+// The maximum number of slots in a petition
+// (585 as of 4/29/21)
+#define MAX_PETITION_SIZE (HEAP_LENGTH / sizeof(SolAccountInfo))
 
 // Instruction type selectors
 // Basic forum instructions
@@ -300,7 +303,6 @@ void redactPost(SolAccountInfo* offender, uint16_t index) {
 // The first account must be the petition account
 // The second account must be the offender's account
 // The rest of the accounts must be the accounts in the petition in the order they appear
-// TODO this still requires the petition account's signature because of the factored check in main
 uint64_t processPetitionOutcome(SolParameters* params) {
   if(params->ka_num < 3) {
     sol_log("Must provide at least 3 accounts to process a petition, got:");
@@ -595,30 +597,30 @@ uint64_t createPetition(SolParameters* params) {
     sol_log_64(params->data_len, 0, 0, 0, 0);
     return ERROR_INVALID_INSTRUCTION_DATA;
   }
-  sol_log_64(16, 0, 0, 0, 0);
+
   SolAccountInfo* petitionAccount = (SolAccountInfo*)&params->ka[0];
   SolAccountInfo* offendingAccount = (SolAccountInfo*)&params->ka[1];
-  sol_log_64((uint64_t)petitionAccount, petitionAccount->is_writable, petitionAccount->is_signer, sizeof(SolAccountInfo*), sizeof(SolAccountInfo));
-  sol_log_64((uint64_t)offendingAccount, 0, 0, 0, 0);
-  sol_log_64(offendingAccount->is_writable, offendingAccount->is_signer, 0, 0, 0);
-  sol_log_64(17, 0, 0, 0, 0);
+
   if(!petitionAccount->is_signer) {
     sol_log("The petition account must sign");
     return ERROR_MISSING_REQUIRED_SIGNATURES;
   }
-  sol_log_64(18, 0, 0, 0, 0);
+
   if(isInitialized(petitionAccount->data)) {
     sol_log("Cannot create a petition on an initialized account");
     return ERROR_INVALID_ACCOUNT_DATA;
   }
-  sol_log_64(19, 0, 0, 0, 0);
+
+  if(signatureCapacity(petitionAccount->data_len) > MAX_PETITION_SIZE) {
+    sol_log("Cannot create a petition with more than:");
+    sol_log_64(MAX_PETITION_SIZE, 0, 0, 0, 0);
+    sol_log("Signature slots");
+    return ERROR_INVALID_ACCOUNT_DATA;
+  }
+
   PostID offendingPost;
-  sol_log_64(20, 0, 0, 0, 0);
   offendingPost.poster = *offendingAccount->key;
-  sol_log_64(21, 0, 0, 0, 0);
   offendingPost.index = *(uint16_t*)(&params->data[1]);
-  sol_log_64(22, 0, 0, 0, 0);
-  sol_log("About to initialize petition account");
   initializePetitionAccount(petitionAccount->data, petitionAccount->data_len, &offendingPost, offendingAccount->data, offendingAccount->data_len);
 
   return SUCCESS;
@@ -626,11 +628,6 @@ uint64_t createPetition(SolParameters* params) {
 #define OFFSETOF(TYPE, ELEMENT) ((size_t)&(((TYPE *)0)->ELEMENT))
 // Main function and entry point
 uint64_t helloworld(SolParameters *params) {
-  //sol_log("Instruction data:");
-  //sol_log_array(params->data, params->data_len);
-  //sol_log_params(params);
-  sol_log_64(sizeof(PetitionAccountMeta), OFFSETOF(PetitionAccountMeta, numSignatures), OFFSETOF(PetitionAccountMeta, reputationRequirement), OFFSETOF(PetitionAccountMeta, offendingPost), sizeof(PetitionSignature));
-  //sol_log_64((uint64_t)params, params->ka_num, params->ka_num, 357, 357);
   if (params->ka_num < 1) {
     sol_log("No accounts were included in the instruction");
     return ERROR_NOT_ENOUGH_ACCOUNT_KEYS;
@@ -665,14 +662,18 @@ uint64_t helloworld(SolParameters *params) {
 }
 
 extern uint64_t entrypoint(const uint8_t *input) {
-  sol_log("Helloworld C program entrypoint");
+  sol_log("Solana Forum C program entrypoint");
 
-  SolAccountInfo accounts[2];
-  SolParameters params = (SolParameters){.ka = accounts};
+  SolParameters params = (SolParameters){.ka = (SolAccountInfo*)HEAP_START_ADDRESS};
 
-  if (!sol_deserialize(input, &params, SOL_ARRAY_SIZE(accounts))) {
+  if (!sol_deserialize(input, &params, HEAP_LENGTH / sizeof(SolAccountInfo))) {
     return ERROR_INVALID_ARGUMENT;
   }
-  
+
+  // Check to make sure that the number of account parameters hasn't exceeded the heap size
+  if(params.ka_num > (HEAP_LENGTH / sizeof(SolAccountInfo))) {
+    return ERROR_INVALID_ARGUMENT;
+  }
+
   return helloworld(&params);
 }
