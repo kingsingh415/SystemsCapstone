@@ -3,6 +3,9 @@
  */
 #include <solana_sdk.h>
 
+#define OFFSETOF(TYPE, ELEMENT) ((size_t)&(((TYPE *)0)->ELEMENT))
+#define USERNAME_LENGTH 32
+
 // Structures and constants
 // ----------------------------------------------------------------------------
 /*
@@ -25,7 +28,7 @@ typedef struct {
 typedef struct {
   uint8_t accountType;
   uint16_t numPosts;
-  char username[32]; // null-terminated if shorter than 32 bytes
+  char username[USERNAME_LENGTH]; // null-terminated if shorter than 32 bytes
   uint64_t reputation;
 } AccountMetadata;
 
@@ -625,7 +628,35 @@ uint64_t createPetition(SolParameters* params) {
 
   return SUCCESS;
 }
-#define OFFSETOF(TYPE, ELEMENT) ((size_t)&(((TYPE *)0)->ELEMENT))
+
+/**
+ * Sets the username of the signer to the instruction data
+ * 
+ * Expects 1 account parameter, which is the user to set the
+ * display name of. That user must have signed off on the 
+ * transaction.
+ */
+uint64_t setUsername(SolParameters* params)
+{
+  if(params->data_len < 2 || params->data_len > 33) {
+    sol_log("Set username instructions must provide between 2 and 33 bytes of data. Got:");
+    sol_log_64(params->data_len, 0, 0, 0, 0);
+    return ERROR_INVALID_INSTRUCTION_DATA;
+  }
+
+  SolAccountInfo* userAccount = &params->ka[0];
+
+  if(!userAccount->is_signer) {
+    sol_log("Users must sign off on instructions that set their username.");
+    return ERROR_MISSING_REQUIRED_SIGNATURES;
+  }
+
+  // Success, set the username
+  sol_memcpy(&userAccount->data[OFFSETOF(AccountMetadata, username)], &params->data[1], params->data_len - 1);
+
+  return SUCCESS;
+}
+
 // Main function and entry point
 uint64_t helloworld(SolParameters *params) {
   if (params->ka_num < 1) {
@@ -655,6 +686,8 @@ uint64_t helloworld(SolParameters *params) {
     return createPetition(params);
   case PROCESS_PETITION_SELECTOR:
     return processPetitionOutcome(params);
+  case SET_USERNAME_SELECTOR:
+    return setUsername(params);
   default:
     sol_log("Invalid instruction selector");
     return ERROR_INVALID_INSTRUCTION_DATA;
