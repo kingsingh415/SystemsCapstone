@@ -228,6 +228,7 @@ bool isInitialized(uint8_t* data) {
 void initializeUserAccount(uint8_t* data, uint64_t length) {
   AccountMetadata* meta = (AccountMetadata*)data;
   meta->accountType = User;
+  meta->reputation = 5;
 }
 
 // Number of signatures that will fit in the account of given length
@@ -257,8 +258,12 @@ void initializePetitionAccount(uint8_t* data, uint64_t length, PostID* offender,
 bool meetsVotingRequirements(SolAccountInfo* user, SolAccountInfo* petition) {
   AccountMetadata* userMeta = (AccountMetadata*)user->data;
   PetitionAccountMeta* petitionMeta = (PetitionAccountMeta*)petition->data;
-
-  return userMeta->reputation >= petitionMeta->reputationRequirement;
+  if(!(userMeta->reputation >= petitionMeta->reputationRequirement)) {
+    sol_log("(Reputation you have, reputation needed, 0, 0, 0)");
+    sol_log_64(userMeta->reputation, petitionMeta->reputationRequirement, 0, 0, 0);
+    return false;
+  }
+  return true;
 }
 
 // Returns true if the given user has already voted on the given petition
@@ -543,6 +548,12 @@ uint64_t processVote(SolParameters* params) {
     return ERROR_UNINITIALIZED_ACCOUNT;
   }
 
+  // Ensure that the account is initialized
+  uint64_t result = ensureInitializedUser(votingAccount);
+  if(result != SUCCESS) {
+    return result;
+  }
+
   // Check if the petition is already completed
   PetitionAccountMeta* petition = (PetitionAccountMeta*)(petitionAccount->data);
   if(petition->numSignatures >= signatureCapacity(petitionAccount->data_len)) {
@@ -649,6 +660,12 @@ uint64_t setUsername(SolParameters* params)
   if(!userAccount->is_signer) {
     sol_log("Users must sign off on instructions that set their username.");
     return ERROR_MISSING_REQUIRED_SIGNATURES;
+  }
+
+  // Ensure that the account is initialized
+  uint64_t result = ensureInitializedUser(userAccount);
+  if(result != SUCCESS) {
+    return result;
   }
 
   // Success, set the username
